@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      dynamodb:
+        image: amazon/dynamodb-local
+        ports:
+          - 8000:8000
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          extensions: curl
+
+      - name: Install dependencies
+        run: composer update --no-interaction --prefer-dist
+
+      - name: PHPStan
+        run: vendor/bin/phpstan analyse src --level=max --no-progress
+
+      - name: PHP CS Fixer
+        run: vendor/bin/php-cs-fixer fix src --dry-run --diff
+
+      - name: PHPUnit
+        env:
+          DYNAMODB_ENDPOINT: http://localhost:8000
+        run: vendor/bin/phpunit tests/

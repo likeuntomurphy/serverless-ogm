@@ -1,0 +1,26 @@
+{
+    "name": "likeuntomurphy/serverless-ogm",
+    "description": "PHP DynamoDB Object Graph Mapper",
+    "type": "library",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "Likeuntomurphy\\Serverless\\OGM\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Likeuntomurphy\\Serverless\\OGM\\Tests\\": "tests/"
+        }
+    },
+    "require": {
+        "php": ">=8.5",
+        "aws/aws-sdk-php": "^3.0",
+        "psr/event-dispatcher": "^1.0"
+    },
+    "require-dev": {
+        "friendsofphp/php-cs-fixer": "^3.94",
+        "phpstan/phpstan": "^2.1",
+        "phpunit/phpunit": "^13.0"
+    }
+}
