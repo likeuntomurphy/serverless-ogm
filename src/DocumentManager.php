@@ -27,6 +27,8 @@ class DocumentManager
     private readonly UnitOfWork $unitOfWork;
     private readonly FlushStrategyInterface $flushStrategy;
 
+    private ?ProfilingLogger $profilingLogger = null;
+
     public function __construct(
         private readonly DynamoDbClient $client,
         ?MetadataFactory $metadataFactory = null,
@@ -44,6 +46,11 @@ class DocumentManager
         $this->identityMap = new IdentityMap();
         $this->unitOfWork = new UnitOfWork($this->metadataFactory, $this->hydrator);
         $this->flushStrategy = $flushStrategy ?? new BatchWriteStrategy($this->client, $this->marshaler, $this->tableSuffix);
+    }
+
+    public function setProfilingLogger(?ProfilingLogger $logger): void
+    {
+        $this->profilingLogger = $logger;
     }
 
     public function getMetadataFactory(): MetadataFactory
@@ -69,9 +76,12 @@ class DocumentManager
         $identityId = IdentityMap::compositeKey($id, $sortKey);
         $existing = $this->identityMap->get($className, $identityId);
         if (null !== $existing) {
+            $this->profilingLogger?->recordIdentityMapHit();
+
             /** @var T $existing */
             return $existing;
         }
+        $this->profilingLogger?->recordIdentityMapMiss();
 
         $key = [];
         if ($metadata->partitionKey) {
@@ -98,6 +108,7 @@ class DocumentManager
         /** @var array<string, mixed> $item */
         $item = $this->marshaler->unmarshalItem((array) $result['Item']);
         $entity = $this->hydrator->hydrate($metadata, $item);
+        $this->profilingLogger?->recordHydration();
 
         $this->identityMap->put($className, $identityId, $entity);
         $this->unitOfWork->registerManaged($entity, $item);
@@ -135,9 +146,12 @@ class DocumentManager
             $identityId = IdentityMap::compositeKey($id);
             $existing = $this->identityMap->get($className, $identityId);
             if (null !== $existing) {
+                $this->profilingLogger?->recordIdentityMapHit();
+
                 /** @var T $existing */
                 $results[$i] = $existing;
             } else {
+                $this->profilingLogger?->recordIdentityMapMiss();
                 $missingIds[$i] = $id;
             }
         }
@@ -168,6 +182,7 @@ class DocumentManager
                     /** @var array<string, mixed> $item */
                     $item = $this->marshaler->unmarshalItem((array) $rawItem);
                     $entity = $this->hydrator->hydrate($metadata, $item);
+                    $this->profilingLogger?->recordHydration();
 
                     $itemId = $item[$pkMapping->attributeName] ?? null;
                     if (!is_string($itemId) && !is_int($itemId)) {
