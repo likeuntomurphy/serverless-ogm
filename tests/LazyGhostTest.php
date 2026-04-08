@@ -82,7 +82,7 @@ class LazyGhostTest extends DynamoDbTestCase
     public function testReferenceToMissingDocumentThrows(): void
     {
         $this->client->putItem([
-            'TableName' => 'grants',
+            'TableName' => 'grants' . $this->tableSuffix,
             'Item' => [
                 'PK' => ['S' => 'grant-bad'],
                 'acres' => ['N' => '100'],
