@@ -77,6 +77,20 @@ class Collection implements \ArrayAccess, \Countable, \IteratorAggregate
         $this->loaded = array_values($this->loaded);
     }
 
+    /**
+     * @template R
+     *
+     * @param \Closure(object): R $callback
+     *
+     * @return list<R>
+     */
+    public function map(\Closure $callback): array
+    {
+        $this->initialize();
+
+        return array_map($callback, $this->loaded);
+    }
+
     /** @return list<object> */
     public function toArray(): array
     {
