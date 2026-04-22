@@ -2,11 +2,11 @@
 
 namespace Likeuntomurphy\Serverless\OGM\Tests\Metadata;
 
-use PHPUnit\Framework\TestCase;
 use Likeuntomurphy\Serverless\OGM\Metadata\EmbeddedMetadata;
 use Likeuntomurphy\Serverless\OGM\Tests\Fixture\Coordinate;
 use Likeuntomurphy\Serverless\OGM\Tests\Fixture\Placement;
 use Likeuntomurphy\Serverless\OGM\Tests\Fixture\SurveyLine;
+use PHPUnit\Framework\TestCase;
 
 /**
  * @internal

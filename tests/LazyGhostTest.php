@@ -82,7 +82,7 @@ class LazyGhostTest extends DynamoDbTestCase
     public function testReferenceToMissingDocumentThrows(): void
     {
         $this->client->putItem([
-            'TableName' => 'grants' . $this->tableSuffix,
+            'TableName' => 'grants'.$this->tableSuffix,
             'Item' => [
                 'PK' => ['S' => 'grant-bad'],
                 'acres' => ['N' => '100'],
@@ -99,7 +99,6 @@ class LazyGhostTest extends DynamoDbTestCase
 
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage('not found.');
-
 
         // Accessing non-ID property triggers the exception
         $_ = $found->grantee->name;

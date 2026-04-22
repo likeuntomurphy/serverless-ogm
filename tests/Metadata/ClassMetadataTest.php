@@ -2,10 +2,10 @@
 
 namespace Likeuntomurphy\Serverless\OGM\Tests\Metadata;
 
-use PHPUnit\Framework\TestCase;
 use Likeuntomurphy\Serverless\OGM\Metadata\ClassMetadata;
 use Likeuntomurphy\Serverless\OGM\Tests\Fixture\Deed;
 use Likeuntomurphy\Serverless\OGM\Tests\Fixture\FullDeed;
+use PHPUnit\Framework\TestCase;
 
 /**
  * @internal

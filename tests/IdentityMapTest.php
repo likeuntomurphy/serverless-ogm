@@ -4,9 +4,14 @@ declare(strict_types=1);
 
 namespace Likeuntomurphy\Serverless\OGM\Tests;
 
-use PHPUnit\Framework\TestCase;
 use Likeuntomurphy\Serverless\OGM\IdentityMap;
+use PHPUnit\Framework\TestCase;
 
+/**
+ * @internal
+ *
+ * @coversNothing
+ */
 class IdentityMapTest extends TestCase
 {
     public function testCompositeKeyWithoutSortKey(): void

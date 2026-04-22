@@ -3,8 +3,8 @@
 namespace Likeuntomurphy\Serverless\OGM\Tests;
 
 use Aws\DynamoDb\DynamoDbClient;
-use PHPUnit\Framework\TestCase;
 use Likeuntomurphy\Serverless\OGM\DocumentManager;
+use PHPUnit\Framework\TestCase;
 
 abstract class DynamoDbTestCase extends TestCase
 {
@@ -17,7 +17,7 @@ abstract class DynamoDbTestCase extends TestCase
 
     protected function setUp(): void
     {
-        $this->tableSuffix = '_test_' . bin2hex(random_bytes(4));
+        $this->tableSuffix = '_test_'.bin2hex(random_bytes(4));
 
         $this->client = new DynamoDbClient([
             'region' => 'us-east-1',
@@ -44,7 +44,7 @@ abstract class DynamoDbTestCase extends TestCase
 
     protected function ensureTable(string $tableName, string $pk, ?string $sk = null): void
     {
-        $fullName = $tableName . $this->tableSuffix;
+        $fullName = $tableName.$this->tableSuffix;
 
         $schema = [
             ['AttributeName' => $pk, 'KeyType' => 'HASH'],

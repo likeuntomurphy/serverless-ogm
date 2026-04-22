@@ -5,9 +5,14 @@ declare(strict_types=1);
 namespace Likeuntomurphy\Serverless\OGM\Tests;
 
 use Aws\DynamoDb\Marshaler;
-use PHPUnit\Framework\TestCase;
 use Likeuntomurphy\Serverless\OGM\UpdateExpressionBuilder;
+use PHPUnit\Framework\TestCase;
 
+/**
+ * @internal
+ *
+ * @coversNothing
+ */
 class UpdateExpressionBuilderTest extends TestCase
 {
     private UpdateExpressionBuilder $builder;
@@ -27,7 +32,9 @@ class UpdateExpressionBuilderTest extends TestCase
         $this->assertStringContainsString('SET', $result['UpdateExpression']);
         $this->assertArrayHasKey('#f0', $result['ExpressionAttributeNames']);
         $this->assertSame('name', $result['ExpressionAttributeNames']['#f0']);
-        $this->assertArrayHasKey(':v0', $result['ExpressionAttributeValues']);
+        $values = $result['ExpressionAttributeValues'] ?? null;
+        $this->assertNotNull($values);
+        $this->assertArrayHasKey(':v0', $values);
     }
 
     public function testRemoveExpression(): void
@@ -68,6 +75,8 @@ class UpdateExpressionBuilderTest extends TestCase
 
         $this->assertNotNull($result);
         $this->assertCount(2, $result['ExpressionAttributeNames']);
-        $this->assertCount(2, $result['ExpressionAttributeValues']);
+        $values = $result['ExpressionAttributeValues'] ?? null;
+        $this->assertNotNull($values);
+        $this->assertCount(2, $values);
     }
 }
