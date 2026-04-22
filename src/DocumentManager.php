@@ -227,6 +227,75 @@ class DocumentManager
         return array_values($results);
     }
 
+    /**
+     * Take a raw (unmarshaled) DynamoDB item produced by an app-owned Query/Scan
+     * and return a managed entity: hydrated, snapshotted for dirty tracking,
+     * registered with the UnitOfWork, and inserted into the IdentityMap.
+     *
+     * If an entity with the same identity is already managed, the existing
+     * instance is returned unchanged — the item is not re-hydrated.
+     *
+     * @template T of object
+     *
+     * @param class-string<T>      $className
+     * @param array<string, mixed> $item      unmarshaled item (run Marshaler::unmarshalItem first)
+     *
+     * @return T
+     */
+    public function attach(string $className, array $item): object
+    {
+        $metadata = $this->metadataFactory->getMetadataFor($className);
+
+        $identityId = $this->resolveIdentityId($className, $item);
+        if (null === $identityId) {
+            $idMapping = $metadata->partitionKey ?? $metadata->idField;
+            $missing = $idMapping ? $idMapping->attributeName : '(no key field defined)';
+
+            throw new \InvalidArgumentException(sprintf('Cannot attach item to "%s": missing or non-scalar partition key attribute "%s".', $className, $missing));
+        }
+
+        if (null !== $metadata->sortKey) {
+            $skVal = $item[$metadata->sortKey->attributeName] ?? null;
+            if (!is_string($skVal) && !is_int($skVal)) {
+                throw new \InvalidArgumentException(sprintf('Cannot attach item to "%s": missing or non-scalar sort key attribute "%s".', $className, $metadata->sortKey->attributeName));
+            }
+        }
+
+        $existing = $this->identityMap->get($className, $identityId);
+        if (null !== $existing) {
+            /** @var T $existing */
+            return $existing;
+        }
+
+        $entity = $this->hydrator->hydrate($metadata, $item);
+
+        $this->identityMap->put($className, $identityId, $entity);
+        $this->unitOfWork->registerManaged($entity, $item);
+
+        /** @var T $entity */
+        return $entity;
+    }
+
+    /**
+     * Attach many raw items in one call. Duplicate identities dedupe via the IdentityMap.
+     *
+     * @template T of object
+     *
+     * @param class-string<T>            $className
+     * @param list<array<string, mixed>> $items
+     *
+     * @return list<T>
+     */
+    public function attachAll(string $className, array $items): array
+    {
+        $entities = [];
+        foreach ($items as $item) {
+            $entities[] = $this->attach($className, $item);
+        }
+
+        return $entities;
+    }
+
     public function persist(object $entity): void
     {
         $this->unitOfWork->persist($entity);
