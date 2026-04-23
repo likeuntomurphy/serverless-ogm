@@ -15,11 +15,15 @@ readonly class Hydrator
     /**
      * @param \Closure(class-string, string): ?object            $finder
      * @param \Closure(class-string, list<string>): list<object> $batchFinder
+     * @param \Closure(string, string, string, string, int, ?array<string, mixed>, bool): array{childIds: list<string>, lastEvaluatedKey: ?array<string, mixed>} $adjacencyQuerier
+     * @param \Closure(string, string, string): int $adjacencyCounter
      */
     public function __construct(
         private MetadataFactory $metadataFactory,
         private \Closure $finder,
         private \Closure $batchFinder,
+        private \Closure $adjacencyQuerier,
+        private \Closure $adjacencyCounter,
     ) {
         $this->ghostFactory = new LazyGhostFactory($metadataFactory);
     }
@@ -33,13 +37,24 @@ readonly class Hydrator
     {
         $entity = $metadata->reflectionClass->newInstanceWithoutConstructor();
 
+        $pkMapping = $metadata->partitionKey ?? $metadata->idField;
+        $parentId = null !== $pkMapping ? (string) ($item[$pkMapping->attributeName] ?? '') : ''; // @phpstan-ignore cast.string
+
         foreach ($metadata->fields as $fieldMapping) {
+            $property = $metadata->reflectionProperties[$fieldMapping->propertyName];
+
+            // Adjacency-table ReferenceMany: data is external, not in the item
+            if ($fieldMapping->isReferenceMany() && null !== $fieldMapping->adjacencyTable) {
+                $property->setValue($entity, $this->hydrateAdjacencyCollection($fieldMapping, $parentId));
+
+                continue;
+            }
+
             if (!array_key_exists($fieldMapping->attributeName, $item)) {
                 continue;
             }
 
             $value = $item[$fieldMapping->attributeName];
-            $property = $metadata->reflectionProperties[$fieldMapping->propertyName];
 
             $value = $this->hydrateValue($fieldMapping, $property, $value);
             $property->setValue($entity, $value);
@@ -58,6 +73,11 @@ readonly class Hydrator
         $item = [];
 
         foreach ($metadata->fields as $fieldMapping) {
+            // Adjacency-table relationships are stored externally
+            if ($fieldMapping->isReferenceMany() && null !== $fieldMapping->adjacencyTable) {
+                continue;
+            }
+
             $property = $metadata->reflectionProperties[$fieldMapping->propertyName];
 
             if (!$property->isInitialized($entity)) {
@@ -89,9 +109,8 @@ readonly class Hydrator
             );
         }
 
-        // ReferenceMany (array of IDs → lazy collection with BatchGetItem)
+        // Inline ReferenceMany (array of IDs → ArrayCollection of lazy ghosts)
         if ($mapping->isReferenceMany() && $mapping->referenceTarget && is_array($value)) {
-            $batchFinder = $this->batchFinder;
             $finder = $this->finder;
             $target = $mapping->referenceTarget;
             $factory = $this->ghostFactory;
@@ -99,23 +118,16 @@ readonly class Hydrator
             /** @var list<string> $ids */
             $ids = array_map(fn (mixed $id): string => (string) $id, $value); // @phpstan-ignore cast.string
 
-            // For array-typed properties, use lazy ghosts to avoid circular hydration
-            $propertyType = $property->getType();
-            if ($propertyType instanceof \ReflectionNamedType && 'array' === $propertyType->getName()) {
-                return array_map(
-                    fn (string $id) => $factory->create(
-                        $target,
-                        $id,
-                        fn (string $class, string $id) => $finder($class, $id),
-                    ),
-                    $ids,
-                );
-            }
-
-            return new Collection(
+            $ghosts = array_map(
+                fn (string $id) => $factory->create(
+                    $target,
+                    $id,
+                    fn (string $class, string $id) => $finder($class, $id),
+                ),
                 $ids,
-                fn (array $ids): array => ($batchFinder)($target, $ids),
             );
+
+            return new ArrayCollection($ghosts);
         }
 
         // EmbedOne
@@ -144,14 +156,13 @@ readonly class Hydrator
             return $this->extractReferenceId($mapping->referenceTarget, $value);
         }
 
-        // ReferenceMany → extract array of IDs
-        if ($mapping->isReferenceMany() && $mapping->referenceTarget) {
+        // Inline ReferenceMany → extract array of IDs
+        if ($mapping->isReferenceMany() && $mapping->referenceTarget && $value instanceof Collection) {
             $target = $mapping->referenceTarget;
-            $items = $value instanceof Collection ? $value->toArray() : (array) $value;
 
             return array_map(
-                fn (mixed $v) => is_object($v) ? $this->extractReferenceId($target, $v) : $v,
-                $items,
+                fn (object $v) => $this->extractReferenceId($target, $v),
+                $value->toArray(),
             );
         }
 
@@ -181,6 +192,35 @@ readonly class Hydrator
         }
 
         return $value;
+    }
+
+    private function hydrateAdjacencyCollection(FieldMapping $mapping, string $parentId): PersistentCollection
+    {
+        $adjacencyTable = $mapping->adjacencyTable ?? '';
+        $adjacencyPk = $mapping->adjacencyPk ?? 'parentId';
+        $adjacencySk = $mapping->adjacencySk ?? 'childId';
+        $scanForward = $mapping->adjacencyScanForward;
+        $target = $mapping->referenceTarget ?? '';
+        $querier = $this->adjacencyQuerier;
+        $counter = $this->adjacencyCounter;
+        $batchFinder = $this->batchFinder;
+
+        $idsExecutor = fn (int $limit, ?array $exclusiveStartKey): array => ($querier)($adjacencyTable, $parentId, $adjacencyPk, $adjacencySk, $limit, $exclusiveStartKey, $scanForward); // @phpstan-ignore argument.type
+
+        return new PersistentCollection(
+            queryExecutor: function (int $limit, ?array $exclusiveStartKey) use ($idsExecutor, $batchFinder, $target): array {
+                $result = $idsExecutor($limit, $exclusiveStartKey);
+                $items = [] !== $result['childIds'] ? ($batchFinder)($target, $result['childIds']) : []; // @phpstan-ignore argument.type
+
+                return [
+                    'items' => $items,
+                    'childIds' => $result['childIds'],
+                    'lastEvaluatedKey' => $result['lastEvaluatedKey'],
+                ];
+            },
+            countExecutor: fn (): int => ($counter)($adjacencyTable, $parentId, $adjacencyPk),
+            idsExecutor: $idsExecutor,
+        );
     }
 
     /**

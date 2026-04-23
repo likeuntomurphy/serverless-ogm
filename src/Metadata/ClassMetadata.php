@@ -66,14 +66,23 @@ class ClassMetadata
 
             $referenceTarget = null;
             $isReferenceMany = false;
+            $adjacencyTable = null;
+            $adjacencyPk = null;
+            $adjacencySk = null;
+            $adjacencyScanForward = true;
             $embedTarget = null;
             $isEmbedMany = false;
 
             if ($refAttrs) {
                 $referenceTarget = $refAttrs[0]->newInstance()->targetDocument;
             } elseif ($refManyAttrs) {
-                $referenceTarget = $refManyAttrs[0]->newInstance()->targetDocument;
+                $refMany = $refManyAttrs[0]->newInstance();
+                $referenceTarget = $refMany->targetDocument;
                 $isReferenceMany = true;
+                $adjacencyTable = $refMany->adjacencyTable ?? $document->table.'_'.$property->getName();
+                $adjacencyPk = $refMany->adjacencyPk;
+                $adjacencySk = $refMany->adjacencySk;
+                $adjacencyScanForward = $refMany->scanForward;
             }
 
             if ($embedOneAttrs) {
@@ -114,6 +123,10 @@ class ClassMetadata
                 isReferenceMany: $isReferenceMany,
                 embedTarget: $embedTarget,
                 isEmbedMany: $isEmbedMany,
+                adjacencyTable: $adjacencyTable,
+                adjacencyPk: $adjacencyPk,
+                adjacencySk: $adjacencySk,
+                adjacencyScanForward: $adjacencyScanForward,
             );
 
             $fields[$property->getName()] = $mapping;

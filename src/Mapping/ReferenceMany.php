@@ -12,6 +12,10 @@ readonly class ReferenceMany
      */
     public function __construct(
         public string $targetDocument,
+        public ?string $adjacencyTable = null,
+        public string $adjacencyPk = 'parentId',
+        public string $adjacencySk = 'childId',
+        public bool $scanForward = true,
     ) {
     }
 }

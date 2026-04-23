@@ -20,6 +20,10 @@ readonly class FieldMapping
         private bool $isReferenceMany = false,
         public ?string $embedTarget = null,
         private bool $isEmbedMany = false,
+        public ?string $adjacencyTable = null,
+        public ?string $adjacencyPk = null,
+        public ?string $adjacencySk = null,
+        public bool $adjacencyScanForward = true,
     ) {
     }
 

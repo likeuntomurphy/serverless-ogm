@@ -29,6 +29,9 @@ class DocumentManager
 
     private ?ProfilingLogger $profilingLogger = null;
 
+    /** @var array<string, array<string, list<string>>> table => parentId => childIds */
+    private array $relationCache = [];
+
     public function __construct(
         private readonly DynamoDbClient $client,
         ?MetadataFactory $metadataFactory = null,
@@ -39,8 +42,10 @@ class DocumentManager
         $this->metadataFactory = $metadataFactory ?? new MetadataFactory();
         $this->hydrator = new Hydrator(
             $this->metadataFactory,
-            fn (string $class, string $id): ?object => $this->find($class, $id),
-            fn (string $class, array $ids): array => $this->batchFind($class, $ids),
+            $this->find(...),
+            $this->batchFind(...),
+            $this->queryAdjacencyTable(...),
+            $this->countAdjacencyTable(...),
         );
         $this->marshaler = new Marshaler(['nullify_invalid' => true]);
         $this->identityMap = new IdentityMap();
@@ -342,8 +347,56 @@ class DocumentManager
             $deletes[] = ['table' => $removal['table'], 'key' => $removal['key']];
         }
 
+        // Fold in adjacency-table operations from PersistentCollection mutations
+        $adjacencyMutations = $this->unitOfWork->getAdjacencyMutations();
+        /** @var list<array{collection: PersistentCollection, writeIndices: list<int>, deleteIndices: list<int>}> $adjacencyOwnership */
+        $adjacencyOwnership = [];
+        foreach ($adjacencyMutations as $mutation) {
+            $writeIndices = [];
+            foreach ($mutation['writes'] as $write) {
+                $writeIndices[] = \count($writes);
+                $writes[] = $write;
+            }
+            $deleteIndices = [];
+            foreach ($mutation['deletes'] as $delete) {
+                $deleteIndices[] = \count($deletes);
+                $deletes[] = $delete;
+            }
+            $adjacencyOwnership[] = [
+                'collection' => $mutation['collection'],
+                'writeIndices' => $writeIndices,
+                'deleteIndices' => $deleteIndices,
+            ];
+        }
+
         // Execute
         $result = $this->flushStrategy->execute($writes, $deletes);
+
+        // Clear mutations on collections whose writes and deletes all succeeded
+        $succeededWriteSet = array_flip($result->succeededWriteIndices);
+        $succeededDeleteSet = array_flip($result->succeededDeleteIndices);
+        foreach ($adjacencyOwnership as $owned) {
+            $allSucceeded = true;
+            foreach ($owned['writeIndices'] as $i) {
+                if (!isset($succeededWriteSet[$i])) {
+                    $allSucceeded = false;
+
+                    break;
+                }
+            }
+            if ($allSucceeded) {
+                foreach ($owned['deleteIndices'] as $i) {
+                    if (!isset($succeededDeleteSet[$i])) {
+                        $allSucceeded = false;
+
+                        break;
+                    }
+                }
+            }
+            if ($allSucceeded) {
+                $owned['collection']->clearMutations();
+            }
+        }
 
         // Dispatch post-events and update identity map for succeeded writes
         foreach ($result->succeededWriteIndices as $i) {
@@ -371,6 +424,7 @@ class DocumentManager
     {
         $this->identityMap->clear();
         $this->unitOfWork->clear();
+        $this->relationCache = [];
     }
 
     public function tableName(string $table): string
@@ -381,6 +435,146 @@ class DocumentManager
     public function getClient(): DynamoDbClient
     {
         return $this->client;
+    }
+
+    /**
+     * Preload all relationships for an adjacency table into an internal cache.
+     * Subsequent PersistentCollection queries for these relationships
+     * will be served from the cache instead of hitting DynamoDB.
+     *
+     * @param class-string $className The document class with the ReferenceMany field
+     * @param string       $fieldName The property name of the ReferenceMany field
+     */
+    public function preloadRelations(string $className, string $fieldName): void
+    {
+        $metadata = $this->metadataFactory->getMetadataFor($className);
+        $fieldMapping = $metadata->fields[$fieldName] ?? null;
+
+        if (null === $fieldMapping || !$fieldMapping->isReferenceMany() || null === $fieldMapping->adjacencyTable) {
+            return;
+        }
+
+        $tableName = $this->tableName($fieldMapping->adjacencyTable);
+        $pkAttr = $fieldMapping->adjacencyPk ?? 'parentId';
+        $skAttr = $fieldMapping->adjacencySk ?? 'childId';
+
+        $cache = [];
+        $params = ['TableName' => $tableName];
+
+        do {
+            $result = $this->client->scan($params);
+            /** @var list<array<string, mixed>> $items */
+            $items = $result['Items'] ?? [];
+            foreach ($items as $item) {
+                /** @var array<string, mixed> $pkRaw */
+                $pkRaw = $item[$pkAttr] ?? [];
+                /** @var array<string, mixed> $skRaw */
+                $skRaw = $item[$skAttr] ?? [];
+                /** @var string $parentId */
+                $parentId = $this->marshaler->unmarshalValue($pkRaw);
+                /** @var string $childId */
+                $childId = $this->marshaler->unmarshalValue($skRaw);
+                $cache[$parentId][] = $childId;
+            }
+            $params['ExclusiveStartKey'] = $result['LastEvaluatedKey'] ?? null;
+        } while (isset($params['ExclusiveStartKey']));
+
+        $this->relationCache[$tableName] = $cache;
+    }
+
+    /**
+     * Get cached child IDs for a parent, or null if not preloaded.
+     *
+     * @return ?list<string>
+     */
+    public function getCachedRelation(string $table, string $parentId): ?array
+    {
+        $tableName = $this->tableName($table);
+
+        if (!isset($this->relationCache[$tableName])) {
+            return null;
+        }
+
+        return $this->relationCache[$tableName][$parentId] ?? [];
+    }
+
+    /**
+     * Query an adjacency table by partition key, returning child IDs.
+     *
+     * @param ?array<string, mixed> $exclusiveStartKey
+     *
+     * @return array{childIds: list<string>, lastEvaluatedKey: ?array<string, mixed>}
+     */
+    public function queryAdjacencyTable(
+        string $table,
+        string $parentId,
+        string $pkAttr,
+        string $skAttr,
+        int $limit,
+        ?array $exclusiveStartKey = null,
+        bool $scanForward = true,
+    ): array {
+        if (null === $exclusiveStartKey) {
+            $cached = $this->getCachedRelation($table, $parentId);
+            if (null !== $cached) {
+                $childIds = $limit < \PHP_INT_MAX ? \array_slice($cached, 0, $limit) : $cached;
+
+                return ['childIds' => $childIds, 'lastEvaluatedKey' => null];
+            }
+        }
+
+        $params = [
+            'TableName' => $this->tableName($table),
+            'KeyConditionExpression' => '#pk = :pk',
+            'ExpressionAttributeNames' => ['#pk' => $pkAttr],
+            'ExpressionAttributeValues' => [':pk' => $this->marshaler->marshalValue($parentId)],
+            'ScanIndexForward' => $scanForward,
+        ];
+
+        if ($limit < \PHP_INT_MAX) {
+            $params['Limit'] = $limit;
+        }
+
+        if (null !== $exclusiveStartKey) {
+            $params['ExclusiveStartKey'] = $exclusiveStartKey;
+        }
+
+        $result = $this->client->query($params);
+
+        /** @var list<array<string, mixed>> $items */
+        $items = $result['Items'] ?? [];
+        $childIds = [];
+        foreach ($items as $item) {
+            /** @var array<string, mixed> $skRaw */
+            $skRaw = $item[$skAttr] ?? ['S' => ''];
+            /** @var string $childId */
+            $childId = $this->marshaler->unmarshalValue($skRaw);
+            $childIds[] = $childId;
+        }
+
+        /** @var ?array<string, mixed> $lastKey */
+        $lastKey = $result['LastEvaluatedKey'] ?? null;
+
+        return [
+            'childIds' => $childIds,
+            'lastEvaluatedKey' => $lastKey,
+        ];
+    }
+
+    /**
+     * Count items in an adjacency table partition.
+     */
+    public function countAdjacencyTable(string $table, string $parentId, string $pkAttr): int
+    {
+        $result = $this->client->query([
+            'TableName' => $this->tableName($table),
+            'KeyConditionExpression' => '#pk = :pk',
+            'ExpressionAttributeNames' => ['#pk' => $pkAttr],
+            'ExpressionAttributeValues' => [':pk' => $this->marshaler->marshalValue($parentId)],
+            'Select' => 'COUNT',
+        ]);
+
+        return (int) ($result['Count'] ?? 0); // @phpstan-ignore cast.int
     }
 
     /** @param array<string, mixed> $item */

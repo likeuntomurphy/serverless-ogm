@@ -150,7 +150,8 @@ class TypeCoercionTest extends DynamoDbTestCase
         $parent = new FullDeed();
         $parent->id = 'deed-with-next';
         $parent->grantee = 'Benjamin Borden';
-        $parent->next = [$child1, $child2];
+        $parent->next->add($child1);
+        $parent->next->add($child2);
 
         $this->dm->persist($parent);
         $this->dm->flush();
@@ -160,11 +161,14 @@ class TypeCoercionTest extends DynamoDbTestCase
         self::assertNotNull($found);
         $this->assertCount(2, $found->next);
 
-        // Batch-loaded entities are fully hydrated
-        $this->assertSame('deed-next-1', $found->next[0]->id);
-        $this->assertSame('deed-next-2', $found->next[1]->id);
-        $this->assertSame('James Henry', $found->next[0]->grantee);
-        $this->assertSame('John Lusk', $found->next[1]->grantee);
+        $next = $found->next->toArray();
+        \assert($next[0] instanceof FullDeed);
+        \assert($next[1] instanceof FullDeed);
+
+        $this->assertSame('deed-next-1', $next[0]->id);
+        $this->assertSame('deed-next-2', $next[1]->id);
+        $this->assertSame('James Henry', $next[0]->grantee);
+        $this->assertSame('John Lusk', $next[1]->grantee);
     }
 
     public function testFullDeedRoundTrip(): void

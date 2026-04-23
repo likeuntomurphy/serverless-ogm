@@ -2,6 +2,8 @@
 
 namespace Likeuntomurphy\Serverless\OGM\Tests\Fixture;
 
+use Likeuntomurphy\Serverless\OGM\ArrayCollection;
+use Likeuntomurphy\Serverless\OGM\Collection;
 use Likeuntomurphy\Serverless\OGM\Mapping\Document;
 use Likeuntomurphy\Serverless\OGM\Mapping\EmbedMany;
 use Likeuntomurphy\Serverless\OGM\Mapping\Field;
@@ -38,7 +40,11 @@ class FullDeed
     #[Reference(targetDocument: FullDeed::class)]
     public ?FullDeed $origin = null;
 
-    /** @var list<FullDeed> */
     #[ReferenceMany(targetDocument: FullDeed::class)]
-    public array $next = [];
+    public Collection $next;
+
+    public function __construct()
+    {
+        $this->next = new ArrayCollection();
+    }
 }
