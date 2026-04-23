@@ -19,8 +19,8 @@ class PersistentCollection implements Collection
 
     /**
      * @param \Closure(int, ?array<string, mixed>): array{items: list<object>, childIds: list<string>, lastEvaluatedKey: ?array<string, mixed>} $queryExecutor
-     * @param \Closure(): int $countExecutor
-     * @param ?\Closure(int, ?array<string, mixed>): array{childIds: list<string>, lastEvaluatedKey: ?array<string, mixed>} $idsExecutor
+     * @param \Closure(): int                                                                                                                   $countExecutor
+     * @param ?\Closure(int, ?array<string, mixed>): array{childIds: list<string>, lastEvaluatedKey: ?array<string, mixed>}                     $idsExecutor
      */
     public function __construct(
         private readonly \Closure $queryExecutor,
@@ -212,36 +212,6 @@ class PersistentCollection implements Collection
         }
     }
 
-    // --- Internal ---
-
-    private function contains(object $entity): bool
-    {
-        foreach ($this->loaded as $existing) {
-            if ($existing === $entity) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private function initialize(): void
-    {
-        if (!$this->initialized) {
-            $allItems = [];
-            $exclusiveStartKey = null;
-
-            do {
-                $result = ($this->queryExecutor)(\PHP_INT_MAX, $exclusiveStartKey);
-                $allItems = array_merge($allItems, $result['items']);
-                $exclusiveStartKey = $result['lastEvaluatedKey'];
-            } while (null !== $exclusiveStartKey);
-
-            $this->loaded = $allItems;
-            $this->initialized = true;
-        }
-    }
-
     /**
      * Return child IDs without hydrating entities.
      * Queries the adjacency table directly — much cheaper than initializing.
@@ -277,5 +247,35 @@ class PersistentCollection implements Collection
     public function slice(int $limit, ?array $exclusiveStartKey = null): array
     {
         return ($this->queryExecutor)($limit, $exclusiveStartKey);
+    }
+
+    // --- Internal ---
+
+    private function contains(object $entity): bool
+    {
+        foreach ($this->loaded as $existing) {
+            if ($existing === $entity) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function initialize(): void
+    {
+        if (!$this->initialized) {
+            $allItems = [];
+            $exclusiveStartKey = null;
+
+            do {
+                $result = ($this->queryExecutor)(\PHP_INT_MAX, $exclusiveStartKey);
+                $allItems = array_merge($allItems, $result['items']);
+                $exclusiveStartKey = $result['lastEvaluatedKey'];
+            } while (null !== $exclusiveStartKey);
+
+            $this->loaded = $allItems;
+            $this->initialized = true;
+        }
     }
 }

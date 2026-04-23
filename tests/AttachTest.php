@@ -2,8 +2,8 @@
 
 namespace Likeuntomurphy\Serverless\OGM\Tests;
 
-use Likeuntomurphy\Serverless\OGM\Identity;
 use Aws\DynamoDb\Marshaler;
+use Likeuntomurphy\Serverless\OGM\Identity;
 use Likeuntomurphy\Serverless\OGM\Tests\Fixture\Deed;
 
 /**

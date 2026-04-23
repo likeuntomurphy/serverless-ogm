@@ -343,6 +343,7 @@ class DocumentManager
 
         // Fold in adjacency-table operations from PersistentCollection mutations
         $adjacencyMutations = $this->unitOfWork->getAdjacencyMutations();
+
         /** @var list<array{collection: PersistentCollection, writeIndices: list<int>, deleteIndices: list<int>}> $adjacencyOwnership */
         $adjacencyOwnership = [];
         foreach ($adjacencyMutations as $mutation) {
@@ -457,15 +458,19 @@ class DocumentManager
 
         do {
             $result = $this->client->scan($params);
+
             /** @var list<array<string, mixed>> $items */
             $items = $result['Items'] ?? [];
             foreach ($items as $item) {
                 /** @var array<string, mixed> $pkRaw */
                 $pkRaw = $item[$pkAttr] ?? [];
+
                 /** @var array<string, mixed> $skRaw */
                 $skRaw = $item[$skAttr] ?? [];
+
                 /** @var string $parentId */
                 $parentId = $this->marshaler->unmarshalValue($pkRaw);
+
                 /** @var string $childId */
                 $childId = $this->marshaler->unmarshalValue($skRaw);
                 $cache[$parentId][] = $childId;
@@ -541,6 +546,7 @@ class DocumentManager
         foreach ($items as $item) {
             /** @var array<string, mixed> $skRaw */
             $skRaw = $item[$skAttr] ?? ['S' => ''];
+
             /** @var string $childId */
             $childId = $this->marshaler->unmarshalValue($skRaw);
             $childIds[] = $childId;

@@ -13,10 +13,10 @@ readonly class Hydrator
     private LazyGhostFactory $ghostFactory;
 
     /**
-     * @param \Closure(class-string, Identity): ?object            $finder
-     * @param \Closure(class-string, list<Identity>): list<object> $batchFinder
+     * @param \Closure(class-string, Identity): ?object                                                                                                          $finder
+     * @param \Closure(class-string, list<Identity>): list<object>                                                                                               $batchFinder
      * @param \Closure(string, string, string, string, int, ?array<string, mixed>, bool): array{childIds: list<string>, lastEvaluatedKey: ?array<string, mixed>} $adjacencyQuerier
-     * @param \Closure(string, string, string): int $adjacencyCounter
+     * @param \Closure(string, string, string): int                                                                                                              $adjacencyCounter
      */
     public function __construct(
         private MetadataFactory $metadataFactory,
