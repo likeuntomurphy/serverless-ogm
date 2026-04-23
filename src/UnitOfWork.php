@@ -142,14 +142,14 @@ class UnitOfWork
         $succeededWriteEntities = new \SplObjectStorage();
         foreach ($result->succeededWriteIndices as $i) {
             if (isset($changeset[$i])) {
-                $succeededWriteEntities->attach($changeset[$i]['entity']);
+                $succeededWriteEntities->offsetSet($changeset[$i]['entity'], true);
             }
         }
 
         $succeededDeleteEntities = new \SplObjectStorage();
         foreach ($result->succeededDeleteIndices as $i) {
             if (isset($removals[$i])) {
-                $succeededDeleteEntities->attach($removals[$i]['entity']);
+                $succeededDeleteEntities->offsetSet($removals[$i]['entity'], true);
             }
         }
 
@@ -159,7 +159,7 @@ class UnitOfWork
             $data = $this->entities[$entity];
 
             if (self::STATE_REMOVED === $data['state']) {
-                if ($succeededDeleteEntities->contains($entity)) {
+                if ($succeededDeleteEntities->offsetExists($entity)) {
                     $toDetach[] = $entity;
                 }
 
@@ -167,7 +167,7 @@ class UnitOfWork
             }
 
             // Only re-snapshot entities whose writes succeeded
-            if ($succeededWriteEntities->contains($entity)) {
+            if ($succeededWriteEntities->offsetExists($entity)) {
                 $metadata = $this->metadataFactory->getMetadataFor($entity::class);
                 $snapshot = $this->hydrator->extract($metadata, $entity);
                 $this->entities->offsetSet($entity, ['state' => self::STATE_MANAGED, 'snapshot' => $snapshot]);

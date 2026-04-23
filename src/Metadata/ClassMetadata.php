@@ -79,10 +79,12 @@ class ClassMetadata
                 $refMany = $refManyAttrs[0]->newInstance();
                 $referenceTarget = $refMany->targetDocument;
                 $isReferenceMany = true;
-                $adjacencyTable = $refMany->adjacencyTable ?? $document->table.'_'.$property->getName();
-                $adjacencyPk = $refMany->adjacencyPk;
-                $adjacencySk = $refMany->adjacencySk;
-                $adjacencyScanForward = $refMany->scanForward;
+                if (null !== $refMany->adjacencyTable) {
+                    $adjacencyTable = $refMany->adjacencyTable;
+                    $adjacencyPk = $refMany->adjacencyPk;
+                    $adjacencySk = $refMany->adjacencySk;
+                    $adjacencyScanForward = $refMany->scanForward;
+                }
             }
 
             if ($embedOneAttrs) {

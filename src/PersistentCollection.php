@@ -40,13 +40,13 @@ class PersistentCollection implements Collection
 
     public function add(object $entity): void
     {
-        if ($this->removed->contains($entity)) {
-            $this->removed->detach($entity);
+        if ($this->removed->offsetExists($entity)) {
+            $this->removed->offsetUnset($entity);
 
             return;
         }
 
-        $this->added->attach($entity);
+        $this->added->offsetSet($entity, true);
 
         if ($this->initialized) {
             $this->loaded[] = $entity;
@@ -55,8 +55,8 @@ class PersistentCollection implements Collection
 
     public function remove(object $entity): void
     {
-        if ($this->added->contains($entity)) {
-            $this->added->detach($entity);
+        if ($this->added->offsetExists($entity)) {
+            $this->added->offsetUnset($entity);
 
             if ($this->initialized) {
                 foreach ($this->loaded as $i => $existing) {
@@ -72,7 +72,7 @@ class PersistentCollection implements Collection
             return;
         }
 
-        $this->removed->attach($entity);
+        $this->removed->offsetSet($entity, true);
 
         if ($this->initialized) {
             foreach ($this->loaded as $i => $existing) {
@@ -97,11 +97,11 @@ class PersistentCollection implements Collection
 
         $newSet = new \SplObjectStorage();
         foreach ($entities as $entity) {
-            $newSet->attach($entity);
+            $newSet->offsetSet($entity, true);
         }
 
         foreach ($this->loaded as $existing) {
-            if (!$newSet->contains($existing)) {
+            if (!$newSet->offsetExists($existing)) {
                 $this->remove($existing);
             }
         }

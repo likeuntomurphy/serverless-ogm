@@ -393,8 +393,12 @@ class DocumentManager
             }
         }
 
-        // Dispatch post-events and update identity map for succeeded writes
+        // Dispatch post-events and update identity map for succeeded entity writes.
+        // Indices past $changeset length belong to folded-in adjacency-table writes.
         foreach ($result->succeededWriteIndices as $i) {
+            if (!isset($changeset[$i])) {
+                continue;
+            }
             $change = $changeset[$i];
 
             if ($change['isNew']) {
@@ -406,6 +410,9 @@ class DocumentManager
         }
 
         foreach ($result->succeededDeleteIndices as $i) {
+            if (!isset($removals[$i])) {
+                continue;
+            }
             $removal = $removals[$i];
             $this->removeFromIdentityMap($removal['entity'], $removal['key']);
             $this->dispatch(new PostRemoveEvent($removal['entity'], $removal['table']));

@@ -101,7 +101,7 @@ class PersistentCollectionTest extends TestCase
         $collection->add($item);
 
         $this->assertCount(1, $collection->getAdded());
-        $this->assertTrue($collection->getAdded()->contains($item));
+        $this->assertTrue($collection->getAdded()->offsetExists($item));
         $this->assertCount(0, $collection->getRemoved());
     }
 
