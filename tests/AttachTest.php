@@ -2,6 +2,7 @@
 
 namespace Likeuntomurphy\Serverless\OGM\Tests;
 
+use Likeuntomurphy\Serverless\OGM\Identity;
 use Aws\DynamoDb\Marshaler;
 use Likeuntomurphy\Serverless\OGM\Tests\Fixture\Deed;
 
@@ -35,7 +36,7 @@ class AttachTest extends DynamoDbTestCase
         $item = ['PK' => 'deed-b', 'grantee' => 'James Henry', 'acres' => 259];
 
         $attached = $this->dm->attach(Deed::class, $item);
-        $found = $this->dm->find(Deed::class, 'deed-b');
+        $found = $this->dm->find(Deed::class, new Identity('deed-b'));
 
         $this->assertSame($attached, $found, 'find() should return the attached instance without hitting DynamoDB');
     }
@@ -61,7 +62,7 @@ class AttachTest extends DynamoDbTestCase
         $this->dm->flush();
         $this->dm->clear();
 
-        $reloaded = $this->dm->find(Deed::class, 'deed-d');
+        $reloaded = $this->dm->find(Deed::class, new Identity('deed-d'));
         $this->assertNull($reloaded, 'attach() must not persist — entity should not exist in DynamoDB');
     }
 
@@ -91,7 +92,7 @@ class AttachTest extends DynamoDbTestCase
         $this->dm->flush();
         $this->dm->clear();
 
-        $reloaded = $this->dm->find(Deed::class, 'deed-e');
+        $reloaded = $this->dm->find(Deed::class, new Identity('deed-e'));
         $this->assertNotNull($reloaded);
         $this->assertSame(400, $reloaded->acres);
         $this->assertSame('Philip Cox', $reloaded->grantee, 'untouched fields must survive the update');

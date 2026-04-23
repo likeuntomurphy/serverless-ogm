@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Likeuntomurphy\Serverless\OGM\Tests;
 
+use Likeuntomurphy\Serverless\OGM\Identity;
 use Likeuntomurphy\Serverless\OGM\IdentityMap;
 use PHPUnit\Framework\TestCase;
 
@@ -14,52 +15,60 @@ use PHPUnit\Framework\TestCase;
  */
 class IdentityMapTest extends TestCase
 {
-    public function testCompositeKeyWithoutSortKey(): void
+    public function testGetReturnsNullForUnknown(): void
     {
-        $this->assertSame('pk-123', IdentityMap::compositeKey('pk-123'));
-        $this->assertSame('pk-123', IdentityMap::compositeKey('pk-123', null));
+        $map = new IdentityMap();
+
+        $this->assertNull($map->get('App\Order', new Identity('pk-123')));
     }
 
-    public function testCompositeKeyWithSortKey(): void
+    public function testPutAndGetSimpleIdentity(): void
     {
-        $key = IdentityMap::compositeKey('pk-123', 'sk-456');
-        $this->assertSame("pk-123\0sk-456", $key);
+        $map = new IdentityMap();
+        $entity = new \stdClass();
+
+        $map->put('App\Order', new Identity('pk-123'), $entity);
+
+        $this->assertSame($entity, $map->get('App\Order', new Identity('pk-123')));
     }
 
-    public function testCompositeKeyDistinguishesSamePkDifferentSk(): void
+    public function testDistinguishesSamePkDifferentSk(): void
     {
         $map = new IdentityMap();
 
         $entity1 = new \stdClass();
         $entity2 = new \stdClass();
 
-        $key1 = IdentityMap::compositeKey('user-1', 'order-1');
-        $key2 = IdentityMap::compositeKey('user-1', 'order-2');
+        $map->put('App\Order', new Identity('user-1', 'order-1'), $entity1);
+        $map->put('App\Order', new Identity('user-1', 'order-2'), $entity2);
 
-        $map->put('App\Order', $key1, $entity1);
-        $map->put('App\Order', $key2, $entity2);
-
-        $this->assertSame($entity1, $map->get('App\Order', $key1));
-        $this->assertSame($entity2, $map->get('App\Order', $key2));
-        $this->assertNotSame($entity1, $entity2);
+        $this->assertSame($entity1, $map->get('App\Order', new Identity('user-1', 'order-1')));
+        $this->assertSame($entity2, $map->get('App\Order', new Identity('user-1', 'order-2')));
     }
 
-    public function testRemoveWithCompositeKey(): void
+    public function testRemove(): void
     {
         $map = new IdentityMap();
 
         $entity1 = new \stdClass();
         $entity2 = new \stdClass();
 
-        $key1 = IdentityMap::compositeKey('user-1', 'order-1');
-        $key2 = IdentityMap::compositeKey('user-1', 'order-2');
+        $map->put('App\Order', new Identity('user-1', 'order-1'), $entity1);
+        $map->put('App\Order', new Identity('user-1', 'order-2'), $entity2);
 
-        $map->put('App\Order', $key1, $entity1);
-        $map->put('App\Order', $key2, $entity2);
+        $map->remove('App\Order', new Identity('user-1', 'order-1'));
 
-        $map->remove('App\Order', $key1);
+        $this->assertNull($map->get('App\Order', new Identity('user-1', 'order-1')));
+        $this->assertSame($entity2, $map->get('App\Order', new Identity('user-1', 'order-2')));
+    }
 
-        $this->assertNull($map->get('App\Order', $key1));
-        $this->assertSame($entity2, $map->get('App\Order', $key2));
+    public function testClear(): void
+    {
+        $map = new IdentityMap();
+        $map->put('App\Order', new Identity('pk-1'), new \stdClass());
+
+        $map->clear();
+
+        $this->assertNull($map->get('App\Order', new Identity('pk-1')));
     }
 }

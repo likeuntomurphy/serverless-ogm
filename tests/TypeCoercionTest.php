@@ -2,6 +2,7 @@
 
 namespace Likeuntomurphy\Serverless\OGM\Tests;
 
+use Likeuntomurphy\Serverless\OGM\Identity;
 use Likeuntomurphy\Serverless\OGM\Tests\Fixture\DeedType;
 use Likeuntomurphy\Serverless\OGM\Tests\Fixture\FullDeed;
 use Likeuntomurphy\Serverless\OGM\Tests\Fixture\SurveyLine;
@@ -31,7 +32,7 @@ class TypeCoercionTest extends DynamoDbTestCase
         $this->dm->flush();
         $this->dm->clear();
 
-        $found = $this->dm->find(FullDeed::class, 'deed-dt-001');
+        $found = $this->dm->find(FullDeed::class, new Identity('deed-dt-001'));
         self::assertNotNull($found);
         $this->assertInstanceOf(\DateTime::class, $found->grantedOn);
         $this->assertSame('1812-03-15', $found->grantedOn->format('Y-m-d'));
@@ -47,7 +48,7 @@ class TypeCoercionTest extends DynamoDbTestCase
         $this->dm->flush();
         $this->dm->clear();
 
-        $found = $this->dm->find(FullDeed::class, 'deed-enum-001');
+        $found = $this->dm->find(FullDeed::class, new Identity('deed-enum-001'));
         self::assertNotNull($found);
         $this->assertSame(DeedType::BargainAndSale, $found->type);
     }
@@ -62,7 +63,7 @@ class TypeCoercionTest extends DynamoDbTestCase
         $this->dm->flush();
         $this->dm->clear();
 
-        $found = $this->dm->find(FullDeed::class, 'deed-arr-001');
+        $found = $this->dm->find(FullDeed::class, new Identity('deed-arr-001'));
         self::assertNotNull($found);
         $this->assertSame(['Cox, Philip', 'Henry, James'], $found->grantors);
     }
@@ -86,7 +87,7 @@ class TypeCoercionTest extends DynamoDbTestCase
         $this->dm->flush();
         $this->dm->clear();
 
-        $found = $this->dm->find(FullDeed::class, 'deed-embed-001');
+        $found = $this->dm->find(FullDeed::class, new Identity('deed-embed-001'));
         self::assertNotNull($found);
         $this->assertCount(2, $found->lines);
         $this->assertInstanceOf(SurveyLine::class, $found->lines[0]);
@@ -117,7 +118,7 @@ class TypeCoercionTest extends DynamoDbTestCase
         $this->dm->flush();
         $this->dm->clear();
 
-        $found = $this->dm->find(FullDeed::class, 'deed-child');
+        $found = $this->dm->find(FullDeed::class, new Identity('deed-child'));
         self::assertNotNull($found);
         self::assertNotNull($found->origin);
 
@@ -157,7 +158,7 @@ class TypeCoercionTest extends DynamoDbTestCase
         $this->dm->flush();
         $this->dm->clear();
 
-        $found = $this->dm->find(FullDeed::class, 'deed-with-next');
+        $found = $this->dm->find(FullDeed::class, new Identity('deed-with-next'));
         self::assertNotNull($found);
         $this->assertCount(2, $found->next);
 
@@ -190,7 +191,7 @@ class TypeCoercionTest extends DynamoDbTestCase
         $this->dm->flush();
         $this->dm->clear();
 
-        $found = $this->dm->find(FullDeed::class, 'deed-full');
+        $found = $this->dm->find(FullDeed::class, new Identity('deed-full'));
         self::assertNotNull($found);
         $this->assertSame('Philip Cox', $found->grantee);
         $this->assertSame(326.0, $found->acres);

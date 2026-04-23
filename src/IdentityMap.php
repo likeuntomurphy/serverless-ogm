@@ -6,27 +6,22 @@ namespace Likeuntomurphy\Serverless\OGM;
 
 class IdentityMap
 {
-    /** @var array<string, array<string, object>> keyed by class => id => entity */
+    /** @var array<string, array<string, array<string, object>>> class => pk => sk => entity */
     private array $map = [];
 
-    public function get(string $className, string $id): ?object
+    public function get(string $className, Identity $id): ?object
     {
-        return $this->map[$className][$id] ?? null;
+        return $this->map[$className][$id->pk][$id->sk ?? ''] ?? null;
     }
 
-    public function put(string $className, string $id, object $entity): void
+    public function put(string $className, Identity $id, object $entity): void
     {
-        $this->map[$className][$id] = $entity;
+        $this->map[$className][$id->pk][$id->sk ?? ''] = $entity;
     }
 
-    public function remove(string $className, string $id): void
+    public function remove(string $className, Identity $id): void
     {
-        unset($this->map[$className][$id]);
-    }
-
-    public static function compositeKey(string $pk, ?string $sk = null): string
-    {
-        return null === $sk ? $pk : $pk."\0".$sk;
+        unset($this->map[$className][$id->pk][$id->sk ?? '']);
     }
 
     public function clear(): void

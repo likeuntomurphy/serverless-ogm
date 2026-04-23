@@ -14,20 +14,20 @@ readonly class LazyGhostFactory
     }
 
     /**
-     * Create a lazy ghost with the ID set eagerly (no fetch).
+     * Create a lazy ghost with its identity set eagerly (no fetch).
      * All other properties trigger initialization via the resolver on first access.
      *
      * @template T of object
      *
-     * @param class-string<T>                         $className
-     * @param callable(class-string, string): ?object $resolver  called when the ghost initializes
+     * @param class-string<T>                           $className
+     * @param callable(class-string, Identity): ?object $resolver  called when the ghost initializes
      *
      * @return T
      */
-    public function create(string $className, string $id, callable $resolver): object
+    public function create(string $className, Identity $id, callable $resolver): object
     {
         $metadata = $this->metadataFactory->getMetadataFor($className);
-        $idMapping = $metadata->partitionKey ?? $metadata->idField;
+        $pkMapping = $metadata->partitionKey ?? $metadata->idField;
 
         $reflector = new \ReflectionClass($className);
 
@@ -45,10 +45,15 @@ readonly class LazyGhostFactory
             }
         });
 
-        // Set the ID eagerly — accessing it won't trigger initialization
-        if ($idMapping) {
-            $reflector->getProperty($idMapping->propertyName)
-                ->setRawValueWithoutLazyInitialization($ghost, $id)
+        if ($pkMapping) {
+            $reflector->getProperty($pkMapping->propertyName)
+                ->setRawValueWithoutLazyInitialization($ghost, $id->pk)
+            ;
+        }
+
+        if (null !== $metadata->sortKey && null !== $id->sk) {
+            $reflector->getProperty($metadata->sortKey->propertyName)
+                ->setRawValueWithoutLazyInitialization($ghost, $id->sk)
             ;
         }
 

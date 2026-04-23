@@ -70,16 +70,15 @@ class DocumentManager
      *
      * @return null|T
      */
-    public function find(string $className, string $id, ?string $sortKey = null): ?object
+    public function find(string $className, Identity $id): ?object
     {
         $metadata = $this->metadataFactory->getMetadataFor($className);
 
-        if (null !== $metadata->sortKey && null === $sortKey) {
-            throw new \InvalidArgumentException(sprintf('Document "%s" has a sort key — you must pass a $sortKey to find().', $className));
+        if (null !== $metadata->sortKey && null === $id->sk) {
+            throw new \InvalidArgumentException(sprintf('Document "%s" has a sort key — Identity must include one.', $className));
         }
 
-        $identityId = IdentityMap::compositeKey($id, $sortKey);
-        $existing = $this->identityMap->get($className, $identityId);
+        $existing = $this->identityMap->get($className, $id);
         if (null !== $existing) {
             $this->profilingLogger?->recordIdentityMapHit();
 
@@ -88,17 +87,14 @@ class DocumentManager
         }
         $this->profilingLogger?->recordIdentityMapMiss();
 
-        $key = [];
-        if ($metadata->partitionKey) {
-            $key[$metadata->partitionKey->attributeName] = $id;
-        } elseif ($metadata->idField) {
-            $key[$metadata->idField->attributeName] = $id;
-        } else {
+        $pkMapping = $metadata->partitionKey ?? $metadata->idField;
+        if (null === $pkMapping) {
             throw new \LogicException(sprintf('No key field defined on "%s".', $className));
         }
 
-        if (null !== $metadata->sortKey && null !== $sortKey) {
-            $key[$metadata->sortKey->attributeName] = $sortKey;
+        $key = [$pkMapping->attributeName => $id->pk];
+        if (null !== $metadata->sortKey && null !== $id->sk) {
+            $key[$metadata->sortKey->attributeName] = $id->sk;
         }
 
         $result = $this->client->getItem([
@@ -115,7 +111,7 @@ class DocumentManager
         $entity = $this->hydrator->hydrate($metadata, $item);
         $this->profilingLogger?->recordHydration();
 
-        $this->identityMap->put($className, $identityId, $entity);
+        $this->identityMap->put($className, $id, $entity);
         $this->unitOfWork->registerManaged($entity, $item);
 
         /** @var T $entity */
@@ -126,7 +122,7 @@ class DocumentManager
      * @template T of object
      *
      * @param class-string<T> $className
-     * @param list<string>    $ids       partition key values
+     * @param list<Identity>  $ids
      *
      * @return list<T>
      */
@@ -145,11 +141,10 @@ class DocumentManager
 
         // Check identity map first
         $results = [];
-        $missingIds = [];
+        $missing = [];
 
         foreach ($ids as $i => $id) {
-            $identityId = IdentityMap::compositeKey($id);
-            $existing = $this->identityMap->get($className, $identityId);
+            $existing = $this->identityMap->get($className, $id);
             if (null !== $existing) {
                 $this->profilingLogger?->recordIdentityMapHit();
 
@@ -157,20 +152,24 @@ class DocumentManager
                 $results[$i] = $existing;
             } else {
                 $this->profilingLogger?->recordIdentityMapMiss();
-                $missingIds[$i] = $id;
+                $missing[$i] = $id;
             }
         }
 
-        if ([] === $missingIds) {
+        if ([] === $missing) {
             return array_values($results);
         }
 
         // BatchGetItem: max 100 keys per request
         $tableName = $this->tableName($metadata->table);
 
-        foreach (array_chunk($missingIds, 100, true) as $chunk) {
+        foreach (array_chunk($missing, 100, true) as $chunk) {
             $keys = array_map(
-                fn (string $id) => $this->marshaler->marshalItem([$pkMapping->attributeName => $id]),
+                fn (Identity $id): array => $this->marshaler->marshalItem(
+                    null !== $id->sk && null !== $metadata->sortKey
+                        ? [$pkMapping->attributeName => $id->pk, $metadata->sortKey->attributeName => $id->sk]
+                        : [$pkMapping->attributeName => $id->pk],
+                ),
                 $chunk,
             );
 
@@ -189,19 +188,17 @@ class DocumentManager
                     $entity = $this->hydrator->hydrate($metadata, $item);
                     $this->profilingLogger?->recordHydration();
 
-                    $itemId = $item[$pkMapping->attributeName] ?? null;
-                    if (!is_string($itemId) && !is_int($itemId)) {
+                    $itemIdentity = $this->resolveIdentity($className, $item);
+                    if (null === $itemIdentity) {
                         continue;
                     }
-                    $itemId = (string) $itemId;
 
-                    $identityId = IdentityMap::compositeKey($itemId);
-                    $this->identityMap->put($className, $identityId, $entity);
+                    $this->identityMap->put($className, $itemIdentity, $entity);
                     $this->unitOfWork->registerManaged($entity, $item);
 
                     // Match back to original index
                     foreach ($chunk as $origIndex => $origId) {
-                        if ($origId === $itemId) {
+                        if ($origId->equals($itemIdentity)) {
                             /** @var T $entity */
                             $results[$origIndex] = $entity;
                             unset($chunk[$origIndex]);
@@ -251,22 +248,19 @@ class DocumentManager
     {
         $metadata = $this->metadataFactory->getMetadataFor($className);
 
-        $identityId = $this->resolveIdentityId($className, $item);
-        if (null === $identityId) {
+        $identity = $this->resolveIdentity($className, $item);
+        if (null === $identity) {
             $idMapping = $metadata->partitionKey ?? $metadata->idField;
             $missing = $idMapping ? $idMapping->attributeName : '(no key field defined)';
 
             throw new \InvalidArgumentException(sprintf('Cannot attach item to "%s": missing or non-scalar partition key attribute "%s".', $className, $missing));
         }
 
-        if (null !== $metadata->sortKey) {
-            $skVal = $item[$metadata->sortKey->attributeName] ?? null;
-            if (!is_string($skVal) && !is_int($skVal)) {
-                throw new \InvalidArgumentException(sprintf('Cannot attach item to "%s": missing or non-scalar sort key attribute "%s".', $className, $metadata->sortKey->attributeName));
-            }
+        if (null !== $metadata->sortKey && null === $identity->sk) {
+            throw new \InvalidArgumentException(sprintf('Cannot attach item to "%s": missing or non-scalar sort key attribute "%s".', $className, $metadata->sortKey->attributeName));
         }
 
-        $existing = $this->identityMap->get($className, $identityId);
+        $existing = $this->identityMap->get($className, $identity);
         if (null !== $existing) {
             /** @var T $existing */
             return $existing;
@@ -274,7 +268,7 @@ class DocumentManager
 
         $entity = $this->hydrator->hydrate($metadata, $item);
 
-        $this->identityMap->put($className, $identityId, $entity);
+        $this->identityMap->put($className, $identity, $entity);
         $this->unitOfWork->registerManaged($entity, $item);
 
         /** @var T $entity */
@@ -580,18 +574,18 @@ class DocumentManager
     /** @param array<string, mixed> $item */
     private function registerInIdentityMap(object $entity, array $item): void
     {
-        $identityId = $this->resolveIdentityId($entity::class, $item);
-        if (null !== $identityId) {
-            $this->identityMap->put($entity::class, $identityId, $entity);
+        $identity = $this->resolveIdentity($entity::class, $item);
+        if (null !== $identity) {
+            $this->identityMap->put($entity::class, $identity, $entity);
         }
     }
 
     /** @param array<string, mixed> $key */
     private function removeFromIdentityMap(object $entity, array $key): void
     {
-        $identityId = $this->resolveIdentityId($entity::class, $key);
-        if (null !== $identityId) {
-            $this->identityMap->remove($entity::class, $identityId);
+        $identity = $this->resolveIdentity($entity::class, $key);
+        if (null !== $identity) {
+            $this->identityMap->remove($entity::class, $identity);
         }
     }
 
@@ -599,7 +593,7 @@ class DocumentManager
      * @param class-string         $className
      * @param array<string, mixed> $item
      */
-    private function resolveIdentityId(string $className, array $item): ?string
+    private function resolveIdentity(string $className, array $item): ?Identity
     {
         $metadata = $this->metadataFactory->getMetadataFor($className);
         $idMapping = $metadata->partitionKey ?? $metadata->idField;
@@ -618,7 +612,7 @@ class DocumentManager
             $sk = is_string($skVal) || is_int($skVal) ? (string) $skVal : null;
         }
 
-        return IdentityMap::compositeKey((string) $pk, $sk);
+        return new Identity((string) $pk, $sk);
     }
 
     /**

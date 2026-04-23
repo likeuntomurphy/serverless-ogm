@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Likeuntomurphy\Serverless\OGM\Tests;
 
+use Likeuntomurphy\Serverless\OGM\Identity;
 use Likeuntomurphy\Serverless\OGM\PersistentCollection;
 use Likeuntomurphy\Serverless\OGM\Tests\Fixture\Author;
 use Likeuntomurphy\Serverless\OGM\Tests\Fixture\Book;
@@ -27,7 +28,7 @@ class AdjacencyTableTest extends DynamoDbTestCase
     {
         $author = $this->seedAuthorWithBooks('a1', ['Tolkien'], ['b1' => 'Hobbit', 'b2' => 'Fellowship']);
 
-        $found = $this->dm->find(Author::class, 'a1');
+        $found = $this->dm->find(Author::class, new Identity('a1'));
         self::assertNotNull($found);
         $this->assertInstanceOf(PersistentCollection::class, $found->books);
     }
@@ -37,7 +38,7 @@ class AdjacencyTableTest extends DynamoDbTestCase
         $this->seedAuthorWithBooks('a1', ['Tolkien'], ['b1' => 'Hobbit', 'b2' => 'Fellowship', 'b3' => 'Towers']);
 
         $this->dm->clear();
-        $found = $this->dm->find(Author::class, 'a1');
+        $found = $this->dm->find(Author::class, new Identity('a1'));
         self::assertNotNull($found);
         \assert($found->books instanceof PersistentCollection);
 
@@ -50,7 +51,7 @@ class AdjacencyTableTest extends DynamoDbTestCase
         $this->seedAuthorWithBooks('a1', ['Tolkien'], ['b1' => 'Hobbit', 'b2' => 'Fellowship']);
 
         $this->dm->clear();
-        $found = $this->dm->find(Author::class, 'a1');
+        $found = $this->dm->find(Author::class, new Identity('a1'));
         self::assertNotNull($found);
         \assert($found->books instanceof PersistentCollection);
 
@@ -70,7 +71,7 @@ class AdjacencyTableTest extends DynamoDbTestCase
         $this->dm->flush();
         $this->dm->clear();
 
-        $found = $this->dm->find(Author::class, 'a-empty');
+        $found = $this->dm->find(Author::class, new Identity('a-empty'));
         self::assertNotNull($found);
         \assert($found->books instanceof PersistentCollection);
 
@@ -83,7 +84,7 @@ class AdjacencyTableTest extends DynamoDbTestCase
         $this->seedAuthorWithBooks('a1', ['Tolkien'], ['b1' => 'Hobbit', 'b2' => 'Fellowship']);
 
         $this->dm->clear();
-        $found = $this->dm->find(Author::class, 'a1');
+        $found = $this->dm->find(Author::class, new Identity('a1'));
         self::assertNotNull($found);
         \assert($found->books instanceof PersistentCollection);
 
@@ -108,7 +109,7 @@ class AdjacencyTableTest extends DynamoDbTestCase
         $this->dm->flush();
 
         $this->dm->clear();
-        $author = $this->dm->find(Author::class, 'a1');
+        $author = $this->dm->find(Author::class, new Identity('a1'));
         self::assertNotNull($author);
         \assert($author->books instanceof PersistentCollection);
 
@@ -116,7 +117,7 @@ class AdjacencyTableTest extends DynamoDbTestCase
         $this->dm->flush();
 
         $this->dm->clear();
-        $reloaded = $this->dm->find(Author::class, 'a1');
+        $reloaded = $this->dm->find(Author::class, new Identity('a1'));
         self::assertNotNull($reloaded);
         \assert($reloaded->books instanceof PersistentCollection);
 
@@ -129,7 +130,7 @@ class AdjacencyTableTest extends DynamoDbTestCase
         $this->seedAuthorWithBooks('a1', ['Tolkien'], ['b1' => 'Hobbit', 'b2' => 'Fellowship']);
 
         $this->dm->clear();
-        $author = $this->dm->find(Author::class, 'a1');
+        $author = $this->dm->find(Author::class, new Identity('a1'));
         self::assertNotNull($author);
         \assert($author->books instanceof PersistentCollection);
 
@@ -139,7 +140,7 @@ class AdjacencyTableTest extends DynamoDbTestCase
         $this->dm->flush();
 
         $this->dm->clear();
-        $reloaded = $this->dm->find(Author::class, 'a1');
+        $reloaded = $this->dm->find(Author::class, new Identity('a1'));
         self::assertNotNull($reloaded);
         \assert($reloaded->books instanceof PersistentCollection);
 
@@ -158,7 +159,7 @@ class AdjacencyTableTest extends DynamoDbTestCase
         $this->dm->flush();
 
         $this->dm->clear();
-        $author = $this->dm->find(Author::class, 'a1');
+        $author = $this->dm->find(Author::class, new Identity('a1'));
         self::assertNotNull($author);
         \assert($author->books instanceof PersistentCollection);
 
@@ -211,7 +212,7 @@ class AdjacencyTableTest extends DynamoDbTestCase
 
         if ([] !== $bookEntities) {
             $this->dm->clear();
-            $managedAuthor = $this->dm->find(Author::class, $authorId);
+            $managedAuthor = $this->dm->find(Author::class, new Identity($authorId));
             self::assertNotNull($managedAuthor);
             \assert($managedAuthor->books instanceof PersistentCollection);
             foreach ($bookEntities as $book) {

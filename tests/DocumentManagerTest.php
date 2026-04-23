@@ -2,6 +2,7 @@
 
 namespace Likeuntomurphy\Serverless\OGM\Tests;
 
+use Likeuntomurphy\Serverless\OGM\Identity;
 use Likeuntomurphy\Serverless\OGM\Tests\Fixture\Deed;
 
 /**
@@ -33,7 +34,7 @@ class DocumentManagerTest extends DynamoDbTestCase
         $this->dm->flush();
         $this->dm->clear();
 
-        $found = $this->dm->find(Deed::class, 'deed-001');
+        $found = $this->dm->find(Deed::class, new Identity('deed-001'));
 
         $this->assertNotNull($found);
         $this->assertSame('deed-001', $found->id);
@@ -44,7 +45,7 @@ class DocumentManagerTest extends DynamoDbTestCase
 
     public function testFindReturnsNullForMissing(): void
     {
-        $this->assertNull($this->dm->find(Deed::class, 'nonexistent'));
+        $this->assertNull($this->dm->find(Deed::class, new Identity('nonexistent')));
     }
 
     public function testIdentityMapReturnsSameInstance(): void
@@ -57,8 +58,8 @@ class DocumentManagerTest extends DynamoDbTestCase
         $this->dm->persist($deed);
         $this->dm->flush();
 
-        $a = $this->dm->find(Deed::class, 'deed-002');
-        $b = $this->dm->find(Deed::class, 'deed-002');
+        $a = $this->dm->find(Deed::class, new Identity('deed-002'));
+        $b = $this->dm->find(Deed::class, new Identity('deed-002'));
 
         $this->assertSame($a, $b);
     }
@@ -74,13 +75,13 @@ class DocumentManagerTest extends DynamoDbTestCase
         $this->dm->flush();
         $this->dm->clear();
 
-        $found = $this->dm->find(Deed::class, 'deed-003');
+        $found = $this->dm->find(Deed::class, new Identity('deed-003'));
         self::assertNotNull($found);
         $found->acres = 330;
         $this->dm->flush();
         $this->dm->clear();
 
-        $updated = $this->dm->find(Deed::class, 'deed-003');
+        $updated = $this->dm->find(Deed::class, new Identity('deed-003'));
         self::assertNotNull($updated);
         $this->assertSame(330, $updated->acres);
     }

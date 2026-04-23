@@ -2,6 +2,7 @@
 
 namespace Likeuntomurphy\Serverless\OGM\Tests;
 
+use Likeuntomurphy\Serverless\OGM\Identity;
 use Likeuntomurphy\Serverless\OGM\Tests\Fixture\Grant;
 use Likeuntomurphy\Serverless\OGM\Tests\Fixture\Person;
 
@@ -37,7 +38,7 @@ class LazyGhostTest extends DynamoDbTestCase
         $this->dm->flush();
         $this->dm->clear();
 
-        $found = $this->dm->find(Grant::class, 'grant-001');
+        $found = $this->dm->find(Grant::class, new Identity('grant-001'));
         self::assertNotNull($found);
         self::assertNotNull($found->grantee);
 
@@ -65,7 +66,7 @@ class LazyGhostTest extends DynamoDbTestCase
         $this->dm->flush();
         $this->dm->clear();
 
-        $found = $this->dm->find(Grant::class, 'grant-002');
+        $found = $this->dm->find(Grant::class, new Identity('grant-002'));
         self::assertNotNull($found);
         self::assertNotNull($found->grantee);
 
@@ -90,7 +91,7 @@ class LazyGhostTest extends DynamoDbTestCase
             ],
         ]);
 
-        $found = $this->dm->find(Grant::class, 'grant-bad');
+        $found = $this->dm->find(Grant::class, new Identity('grant-bad'));
         self::assertNotNull($found);
         self::assertNotNull($found->grantee);
 

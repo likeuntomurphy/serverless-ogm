@@ -13,8 +13,8 @@ readonly class Hydrator
     private LazyGhostFactory $ghostFactory;
 
     /**
-     * @param \Closure(class-string, string): ?object            $finder
-     * @param \Closure(class-string, list<string>): list<object> $batchFinder
+     * @param \Closure(class-string, Identity): ?object            $finder
+     * @param \Closure(class-string, list<Identity>): list<object> $batchFinder
      * @param \Closure(string, string, string, string, int, ?array<string, mixed>, bool): array{childIds: list<string>, lastEvaluatedKey: ?array<string, mixed>} $adjacencyQuerier
      * @param \Closure(string, string, string): int $adjacencyCounter
      */
@@ -104,8 +104,8 @@ readonly class Hydrator
 
             return $this->ghostFactory->create(
                 $mapping->referenceTarget,
-                $value,
-                fn (string $class, string $id) => $finder($class, $id),
+                new Identity($value),
+                fn (string $class, Identity $id) => $finder($class, $id),
             );
         }
 
@@ -121,8 +121,8 @@ readonly class Hydrator
             $ghosts = array_map(
                 fn (string $id) => $factory->create(
                     $target,
-                    $id,
-                    fn (string $class, string $id) => $finder($class, $id),
+                    new Identity($id),
+                    fn (string $class, Identity $id) => $finder($class, $id),
                 ),
                 $ids,
             );
@@ -210,7 +210,8 @@ readonly class Hydrator
         return new PersistentCollection(
             queryExecutor: function (int $limit, ?array $exclusiveStartKey) use ($idsExecutor, $batchFinder, $target): array {
                 $result = $idsExecutor($limit, $exclusiveStartKey);
-                $items = [] !== $result['childIds'] ? ($batchFinder)($target, $result['childIds']) : []; // @phpstan-ignore argument.type
+                $identities = array_map(fn (string $childId) => new Identity($childId), $result['childIds']);
+                $items = [] !== $identities ? ($batchFinder)($target, $identities) : []; // @phpstan-ignore argument.type
 
                 return [
                     'items' => $items,
